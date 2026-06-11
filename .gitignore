@@ -1,0 +1,12 @@
+# Local credentials - NEVER commit
+secrets/aws/*
+!secrets/aws/.gitkeep
+!secrets/aws/README.md
+
+# Generated reports - sensitive
+reports/*
+!reports/.gitkeep
+
+# Local env files
+.env
+*.local
