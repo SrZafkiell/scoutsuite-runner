@@ -6,7 +6,9 @@ param(
 
     [string]$ImageName = "local/scoutsuite-runner:5.14.0",
 
-    [string]$Region = "us-east-1"
+    [string]$Region = "us-east-1",
+
+    [string]$Services = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,15 +38,36 @@ Write-Host "Running ScoutSuite AWS report..."
 Write-Host "Client:  $SafeClient"
 Write-Host "Profile: $Profile"
 Write-Host "Output:  $RunDir"
+
+if ($Services.Trim() -ne "") {
+    Write-Host "Services: $Services"
+} else {
+    Write-Host "Services: all"
+}
+
 Write-Host ""
+
+$ScoutArgs = @(
+    "aws",
+    "--profile", $Profile,
+    "--no-browser",
+    "--report-dir", "/reports"
+)
+
+if ($Services.Trim() -ne "") {
+    $ScoutArgs += "--services"
+    $ScoutArgs += $Services.Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
+}
 
 docker run --rm -it `
     -e AWS_PROFILE=$Profile `
     -e AWS_DEFAULT_REGION=$Region `
+    -e AWS_RETRY_MODE=adaptive `
+    -e AWS_MAX_ATTEMPTS=10 `
     -v "${AwsDirDocker}:/root/.aws:ro" `
     -v "${RunDirDocker}:/reports" `
     $ImageName `
-    aws --profile $Profile --no-browser --report-dir /reports
+    @ScoutArgs
 
 Write-Host ""
 Write-Host "Report generated at:"
