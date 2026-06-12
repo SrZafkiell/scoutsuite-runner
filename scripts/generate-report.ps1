@@ -5,6 +5,10 @@ param(
 
     [string]$ProjectFilter = "",
 
+    [ValidateSet("Critical", "High", "Medium", "Low", "Informational")]
+    
+    [string]$MinSeverity = "Informational",
+
     [string]$ImageName = "local/scoutsuite-runner:5.14.0"
 )
 
@@ -79,6 +83,7 @@ $RepoRootDocker = $RepoRootPath -replace '\\', '/'
 Write-Host "Generating report draft..."
 Write-Host "Client:  $SafeClient"
 Write-Host "Run dir: $RunDirPath"
+Write-Host "Minimum severity: $MinSeverity"
 
 if ($ProjectFilter.Trim() -ne "") {
     Write-Host "Filter:  $ProjectFilter"
@@ -89,7 +94,8 @@ Write-Host ""
 $GeneratorArgs = @(
     "tools/generate_report.py",
     "--run-dir", $RunDirDocker,
-    "--client", $SafeClient
+    "--client", $SafeClient,
+    "--min-severity", $MinSeverity
 )
 
 if ($ProjectFilter.Trim() -ne "") {

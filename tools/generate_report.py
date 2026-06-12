@@ -184,13 +184,25 @@ def get_items(finding: dict[str, Any]) -> list[Any]:
     return []
 
 
-def build_findings(data: dict[str, Any], project_filter: str = "") -> list[dict[str, Any]]:
+def build_findings(
+    data: dict[str, Any],
+    project_filter: str = "",
+    min_severity: str = "Informational",
+) -> list[dict[str, Any]]:
     findings = []
     seen = set()
+
+    min_severity_rank = SEVERITY_ORDER.get(min_severity, SEVERITY_ORDER["Informational"])
 
     for path, finding_id, finding in walk_findings(data):
         service = get_service_from_path(path, finding)
         severity = get_severity(finding)
+
+        severity_rank = SEVERITY_ORDER.get(severity, SEVERITY_ORDER["Unknown"])
+
+        if severity_rank > min_severity_rank:
+            continue
+
         title = get_title(finding_id, finding)
         description = get_description(finding)
         recommendation = get_recommendation(finding)
@@ -519,6 +531,12 @@ def main() -> None:
         default="",
         help="Optional text filter for project/resource names. Use carefully.",
     )
+    parser.add_argument(
+        "--min-severity",
+        default="Informational",
+        choices=["Critical", "High", "Medium", "Low", "Informational"],
+        help="Minimum severity to include in generated outputs.",
+    )
 
     args = parser.parse_args()
 
@@ -526,7 +544,11 @@ def main() -> None:
     source_file = find_scoutsuite_results_file(run_dir)
     data = load_scoutsuite_js(source_file)
 
-    findings = build_findings(data, project_filter=args.project_filter)
+    findings = build_findings(
+        data,
+        project_filter=args.project_filter,
+        min_severity=args.min_severity,
+    )
 
     generated_dir = run_dir / "generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
