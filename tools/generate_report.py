@@ -566,6 +566,7 @@ def main() -> None:
     write_summary_json(generated_dir / "summary.json", findings)
 
     print(f"Parsed results: {source_file}")
+    print(f"Minimum severity: {args.min_severity}")
     print(f"Findings found: {len(findings)}")
     print(f"Generated files: {generated_dir}")
 
