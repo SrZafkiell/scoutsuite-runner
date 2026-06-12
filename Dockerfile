@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir ScoutSuite==${SCOUTSUITE_VERSION}
+    && pip install --no-cache-dir ScoutSuite==${SCOUTSUITE_VERSION} python-docx
 
 WORKDIR /work
 

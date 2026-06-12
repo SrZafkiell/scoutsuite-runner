@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from docx import Document
 
 
 SEVERITY_MAP = {
@@ -500,6 +501,155 @@ def write_report_md(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_report_docx(
+    path: Path,
+    client: str,
+    run_dir: Path,
+    source_file: Path,
+    findings: list[dict[str, Any]],
+    project_filter: str,
+    min_severity: str,
+) -> None:
+    counts = Counter(finding["severity"] for finding in findings)
+    services = Counter(finding["service"] for finding in findings)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    document = Document()
+
+    document.add_heading(f"Meta Data Security Assessment Draft - {client}", 0)
+
+    document.add_paragraph(f"Generated at: {generated_at}")
+    document.add_paragraph(f"Minimum severity: {min_severity}")
+    document.add_paragraph("Validation status: Pending manual review")
+
+    document.add_heading("1. Executive Summary", level=1)
+    document.add_paragraph(
+        "This document is a draft security assessment generated from ScoutSuite output. "
+        "It must be manually reviewed before being shared externally."
+    )
+
+    document.add_heading("2. Scope and Boundaries", level=1)
+    document.add_paragraph(
+        f"The assessment focuses on AWS resources related to {client} and shared infrastructure "
+        "that directly affects the application's security posture."
+    )
+    document.add_paragraph(
+        "ScoutSuite was executed against the AWS account using read-only audit credentials. "
+        "Because the account may host multiple products, this draft should be filtered and validated "
+        "against the actual application inventory before final delivery."
+    )
+
+    if project_filter:
+        document.add_paragraph(f"Project filter used: {project_filter}")
+        document.add_paragraph(
+            "Warning: name/tag filtering can miss shared resources such as VPCs, security groups, "
+            "IAM policies, KMS keys, logs, or DNS records that affect the application."
+        )
+
+    document.add_heading("3. Source Evidence", level=1)
+    document.add_paragraph(f"ScoutSuite run folder: {run_dir}")
+    document.add_paragraph(f"Parsed results file: {source_file}")
+
+    document.add_heading("4. Findings Summary", level=1)
+
+    table = document.add_table(rows=1, cols=2)
+    table.style = "Table Grid"
+    header_cells = table.rows[0].cells
+    header_cells[0].text = "Severity"
+    header_cells[1].text = "Count"
+
+    for severity in ["Critical", "High", "Medium", "Low", "Informational", "Unknown"]:
+        row_cells = table.add_row().cells
+        row_cells[0].text = severity
+        row_cells[1].text = str(counts.get(severity, 0))
+
+    document.add_heading("5. Findings by Service", level=1)
+
+    service_table = document.add_table(rows=1, cols=2)
+    service_table.style = "Table Grid"
+    header_cells = service_table.rows[0].cells
+    header_cells[0].text = "Service"
+    header_cells[1].text = "Count"
+
+    for service, count in sorted(services.items()):
+        row_cells = service_table.add_row().cells
+        row_cells[0].text = service
+        row_cells[1].text = str(count)
+
+    document.add_heading("6. Meta Data Security Control Review", level=1)
+
+    control_table = document.add_table(rows=1, cols=3)
+    control_table.style = "Table Grid"
+    header_cells = control_table.rows[0].cells
+    header_cells[0].text = "Control Area"
+    header_cells[1].text = "Status"
+    header_cells[2].text = "Evidence / Notes"
+
+    controls = [
+        ("Access management", "Pending review", "IAM users, roles, policies, MFA, least privilege"),
+        ("Encryption in transit", "Pending review", "HTTPS, ACM, ALB/CloudFront TLS configuration"),
+        ("Encryption at rest", "Pending review", "EBS, RDS, S3, KMS configuration"),
+        ("Credential and token protection", "Pending review", "Secrets Manager, SSM, environment variables, key rotation"),
+        ("Logging and monitoring", "Pending review", "CloudTrail, CloudWatch, ALB logs, application logs"),
+        ("Vulnerability and patch management", "Pending review", "OS updates, dependency updates, runtime versions"),
+        ("Incident response", "Pending review", "Alerting, escalation, response ownership"),
+    ]
+
+    for control, status, notes in controls:
+        row_cells = control_table.add_row().cells
+        row_cells[0].text = control
+        row_cells[1].text = status
+        row_cells[2].text = notes
+
+    document.add_heading("7. Prioritized Remediation Plan", level=1)
+
+    remediation_table = document.add_table(rows=1, cols=5)
+    remediation_table.style = "Table Grid"
+    header_cells = remediation_table.rows[0].cells
+    header_cells[0].text = "Priority"
+    header_cells[1].text = "Severity"
+    header_cells[2].text = "Service"
+    header_cells[3].text = "Finding"
+    header_cells[4].text = "Affected Resources"
+
+    for finding in findings:
+        row_cells = remediation_table.add_row().cells
+        row_cells[0].text = priority_from_severity(finding["severity"])
+        row_cells[1].text = finding["severity"]
+        row_cells[2].text = finding["service"]
+        row_cells[3].text = finding["title"]
+        row_cells[4].text = finding["affected_resources"] or "Pending validation"
+
+    document.add_heading("8. Detailed Findings", level=1)
+
+    for index, finding in enumerate(findings, start=1):
+        document.add_heading(f"{index}. {finding['title']}", level=2)
+
+        document.add_paragraph(f"Severity: {finding['severity']}")
+        document.add_paragraph(f"Priority: {priority_from_severity(finding['severity'])}")
+        document.add_paragraph(f"Service: {finding['service']}")
+        document.add_paragraph(f"Finding ID: {finding['finding_id']}")
+        document.add_paragraph(f"Affected resources: {finding['affected_resources'] or 'Pending validation'}")
+
+        document.add_paragraph("Description", style="Heading 3")
+        document.add_paragraph(
+            finding["description"] or "No description available in parsed ScoutSuite output."
+        )
+
+        document.add_paragraph("Recommended Action", style="Heading 3")
+        document.add_paragraph(finding["recommendation"])
+
+        document.add_paragraph("Validation Notes", style="Heading 3")
+        document.add_paragraph("- Confirm this resource belongs to the application scope.")
+        document.add_paragraph("- Confirm the finding is still active.")
+        document.add_paragraph("- Confirm remediation owner and target date.")
+
+    document.add_heading("9. Appendix", level=1)
+    document.add_paragraph("Raw ScoutSuite HTML report should be attached or referenced separately.")
+    document.add_paragraph("Generated CSV and remediation task files are available in the generated folder.")
+
+    document.save(path)
+
 def write_summary_json(path: Path, findings: list[dict[str, Any]]) -> None:
     safe_findings = []
 
@@ -554,7 +704,9 @@ def main() -> None:
     generated_dir.mkdir(parents=True, exist_ok=True)
 
     write_csv(generated_dir / "findings.csv", findings)
+    
     write_tasks_md(generated_dir / "remediation-tasks.md", args.client, findings)
+
     write_report_md(
         generated_dir / "report-draft.md",
         args.client,
@@ -563,6 +715,17 @@ def main() -> None:
         findings,
         args.project_filter,
     )
+
+    write_report_docx(
+        generated_dir / "report-draft.docx",
+        args.client,
+        run_dir,
+        source_file,
+        findings,
+        args.project_filter,
+        args.min_severity,
+    )
+
     write_summary_json(generated_dir / "summary.json", findings)
 
     print(f"Parsed results: {source_file}")
